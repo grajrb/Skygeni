@@ -1,4 +1,4 @@
-import db from '../db/database';
+import { queryAll, queryGet } from '../db/database';
 
 export interface QuarterInfo {
   startDate: string;
@@ -32,7 +32,7 @@ export function getPreviousYearQuarter(): QuarterInfo {
  * Uses closed_at for Closed Won deals, falls back to created_at if closed_at is null
  * Excludes deals with null amounts
  */
-export function getRevenueForPeriod(startDate: string, endDate: string): number {
+export async function getRevenueForPeriod(startDate: string, endDate: string): Promise<number> {
   const query = `
     SELECT COALESCE(SUM(amount), 0) as revenue
     FROM deals
@@ -44,14 +44,14 @@ export function getRevenueForPeriod(startDate: string, endDate: string): number 
       )
   `;
   
-  const result = db.prepare(query).get(startDate, endDate, startDate, endDate) as { revenue: number };
-  return result.revenue;
+  const result = await queryGet<{ revenue: number }>(query, [startDate, endDate, startDate, endDate]);
+  return result.revenue || 0;
 }
 
 /**
  * Get current quarter revenue
  */
-export function getCurrentQuarterRevenue(): number {
+export async function getCurrentQuarterRevenue(): Promise<number> {
   const quarter = getCurrentQuarter();
   return getRevenueForPeriod(quarter.startDate, quarter.endDate);
 }
@@ -59,15 +59,15 @@ export function getCurrentQuarterRevenue(): number {
 /**
  * Get quarterly target (sum of monthly targets for Q1 2026)
  */
-export function getQuarterlyTarget(): number {
+export async function getQuarterlyTarget(): Promise<number> {
   const query = `
     SELECT COALESCE(SUM(target), 0) as total_target
     FROM targets
     WHERE month IN ('2026-01', '2026-02', '2026-03')
   `;
-  
-  const result = db.prepare(query).get() as { total_target: number };
-  return result.total_target;
+
+  const result = await queryGet<{ total_target: number }>(query);
+  return result.total_target || 0;
 }
 
 /**
@@ -81,36 +81,36 @@ export function calculateGap(actual: number, target: number): number {
 /**
  * Get YoY change percentage
  */
-export function getYoYChange(): number | null {
+export async function getYoYChange(): Promise<number | null> {
   const currentQuarter = getCurrentQuarter();
   const previousQuarter = getPreviousYearQuarter();
-  
-  const currentRevenue = getRevenueForPeriod(currentQuarter.startDate, currentQuarter.endDate);
-  const previousRevenue = getRevenueForPeriod(previousQuarter.startDate, previousQuarter.endDate);
-  
+
+  const currentRevenue = await getRevenueForPeriod(currentQuarter.startDate, currentQuarter.endDate);
+  const previousRevenue = await getRevenueForPeriod(previousQuarter.startDate, previousQuarter.endDate);
+
   if (previousRevenue === 0) return null;
-  
+
   return ((currentRevenue - previousRevenue) / previousRevenue) * 100;
 }
 
 /**
  * Get pipeline size (count of deals in Prospecting or Negotiation)
  */
-export function getPipelineSize(): number {
+export async function getPipelineSize(): Promise<number> {
   const query = `
     SELECT COUNT(*) as count
     FROM deals
     WHERE stage IN ('Prospecting', 'Negotiation')
   `;
-  
-  const result = db.prepare(query).get() as { count: number };
-  return result.count;
+
+  const result = await queryGet<{ count: number }>(query);
+  return result.count || 0;
 }
 
 /**
  * Calculate win rate (percentage of closed deals that were won)
  */
-export function getWinRate(): number {
+export async function getWinRate(): Promise<number> {
   const query = `
     SELECT 
       COUNT(CASE WHEN stage = 'Closed Won' THEN 1 END) as won,
@@ -118,38 +118,38 @@ export function getWinRate(): number {
     FROM deals
   `;
   
-  const result = db.prepare(query).get() as { won: number; total_closed: number };
-  
-  if (result.total_closed === 0) return 0;
+  const result = await queryGet<{ won: number; total_closed: number }>(query);
+
+  if (!result.total_closed) return 0;
   return (result.won / result.total_closed) * 100;
 }
 
 /**
  * Calculate average deal size for won deals (excluding null amounts)
  */
-export function getAvgDealSize(): number {
+export async function getAvgDealSize(): Promise<number> {
   const query = `
     SELECT COALESCE(AVG(amount), 0) as avg_size
     FROM deals
     WHERE stage = 'Closed Won' AND amount IS NOT NULL
   `;
-  
-  const result = db.prepare(query).get() as { avg_size: number };
-  return result.avg_size;
+
+  const result = await queryGet<{ avg_size: number }>(query);
+  return result.avg_size || 0;
 }
 
 /**
  * Calculate average sales cycle time in days
  * Only for deals with both created_at and closed_at dates
  */
-export function getSalesCycleTime(): number {
+export async function getSalesCycleTime(): Promise<number> {
   const query = `
     SELECT AVG(JULIANDAY(closed_at) - JULIANDAY(created_at)) as avg_cycle
     FROM deals
     WHERE closed_at IS NOT NULL AND stage IN ('Closed Won', 'Closed Lost')
   `;
-  
-  const result = db.prepare(query).get() as { avg_cycle: number | null };
+
+  const result = await queryGet<{ avg_cycle: number | null }>(query);
   return result.avg_cycle || 0;
 }
 
@@ -157,7 +157,7 @@ export function getSalesCycleTime(): number {
  * Get stale deals (in Prospecting/Negotiation with no activity in 60+ days or no activity at all)
  * Current date: 2026-02-09
  */
-export function getStaleDeals() {
+export async function getStaleDeals() {
   const query = `
     SELECT 
       d.deal_id,
@@ -186,15 +186,15 @@ export function getStaleDeals() {
     ORDER BY days_since_activity DESC
   `;
   
-  return db.prepare(query).all();
+  return queryAll(query);
 }
 
 /**
  * Get underperforming reps (win rate below average or Q1 revenue below target)
  */
-export function getUnderperformingReps() {
-  const avgWinRate = getWinRate();
-  const quarterlyTarget = getQuarterlyTarget();
+export async function getUnderperformingReps() {
+  const avgWinRate = await getWinRate();
+  const quarterlyTarget = await getQuarterlyTarget();
   const perRepTarget = quarterlyTarget / 15; // 15 reps total
   
   const query = `
@@ -225,13 +225,13 @@ export function getUnderperformingReps() {
     ORDER BY win_rate ASC, q1_revenue ASC
   `;
   
-  return db.prepare(query).all(avgWinRate, perRepTarget);
+  return queryAll(query, [avgWinRate, perRepTarget]);
 }
 
 /**
  * Get accounts with low activity (have open deals but < 2 activities in last 90 days)
  */
-export function getLowActivityAccounts() {
+export async function getLowActivityAccounts() {
   const query = `
     SELECT 
       a.account_id,
@@ -252,13 +252,13 @@ export function getLowActivityAccounts() {
     ORDER BY open_deals DESC, recent_activity_count ASC
   `;
   
-  return db.prepare(query).all();
+  return queryAll(query);
 }
 
 /**
  * Generate actionable recommendations based on data analysis
  */
-export function generateRecommendations() {
+export async function generateRecommendations() {
   const recommendations: Array<{
     priority: 'High' | 'Medium' | 'Low';
     action: string;
@@ -267,7 +267,7 @@ export function generateRecommendations() {
   }> = [];
 
   // Check stale deals
-  const staleDeals = getStaleDeals();
+  const staleDeals = await getStaleDeals();
   if (staleDeals.length > 0) {
     const enterpriseStale = staleDeals.filter((d: any) => d.segment === 'Enterprise');
     if (enterpriseStale.length > 5) {
@@ -288,7 +288,7 @@ export function generateRecommendations() {
   }
 
   // Check underperforming reps
-  const underperformingReps = getUnderperformingReps();
+  const underperformingReps = await getUnderperformingReps();
   if (underperformingReps.length > 0) {
     const lowestRep = underperformingReps[0] as any;
     recommendations.push({
@@ -300,7 +300,7 @@ export function generateRecommendations() {
   }
 
   // Check low activity accounts
-  const lowActivityAccounts = getLowActivityAccounts();
+  const lowActivityAccounts = await getLowActivityAccounts();
   if (lowActivityAccounts.length > 0) {
     const midMarketLowActivity = lowActivityAccounts.filter((a: any) => a.segment === 'Mid-Market');
     if (midMarketLowActivity.length >= 3) {
@@ -314,7 +314,7 @@ export function generateRecommendations() {
   }
 
   // Check sales cycle
-  const avgCycle = getSalesCycleTime();
+  const avgCycle = await getSalesCycleTime();
   if (avgCycle > 90) {
     recommendations.push({
       priority: 'Medium',
@@ -325,7 +325,7 @@ export function generateRecommendations() {
   }
 
   // Check pipeline size
-  const pipelineSize = getPipelineSize();
+  const pipelineSize = await getPipelineSize();
   if (pipelineSize < 50) {
     recommendations.push({
       priority: 'High',
@@ -336,8 +336,8 @@ export function generateRecommendations() {
   }
 
   // Check revenue gap
-  const currentRevenue = getCurrentQuarterRevenue();
-  const target = getQuarterlyTarget();
+  const currentRevenue = await getCurrentQuarterRevenue();
+  const target = await getQuarterlyTarget();
   const gap = calculateGap(currentRevenue, target);
   
   if (gap < -20) {

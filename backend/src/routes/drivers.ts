@@ -8,12 +8,12 @@ import {
 
 const router = Router();
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const pipelineSize = getPipelineSize();
-    const winRate = getWinRate();
-    const avgDealSize = getAvgDealSize();
-    const salesCycleTime = getSalesCycleTime();
+    const pipelineSize = await getPipelineSize();
+    const winRate = await getWinRate();
+    const avgDealSize = await getAvgDealSize();
+    const salesCycleTime = await getSalesCycleTime();
 
     res.json({
       pipelineSize,

@@ -66,18 +66,6 @@ This Revenue Intelligence Console analyzes 1 year of sales data to answer:
 ### Prerequisites
 - **Node.js 18+** (with npm)
 - **Git**
-- **Windows Users:** You'll need Windows Build Tools for SQLite native compilation:
-  ```bash
-  # Option 1: Install Visual Studio Build Tools (recommended)
-  # Download from: https://visualstudio.microsoft.com/downloads/
-  # Install "Desktop development with C++" workload
-  
-  # Option 2: Install windows-build-tools via npm (as Administrator)
-  npm install --global windows-build-tools
-  
-  # Option 3: Use WSL2 (Windows Subsystem for Linux)
-  # Follow: https://docs.microsoft.com/en-us/windows/wsl/install
-  ```
 
 ### Installation
 
@@ -259,7 +247,7 @@ Returns 3-5 actionable recommendations prioritized by impact.
 - **Runtime:** Node.js 18+
 - **Framework:** Express.js
 - **Language:** TypeScript
-- **Database:** SQLite (better-sqlite3)
+- **Database:** SQLite (sql.js)
 - **Dev Tools:** tsx (TypeScript execution)
 
 ### Frontend
@@ -484,14 +472,6 @@ For questions or issues:
 4. Check backend terminal logs for server errors
 
 ### Common Issues
-
-#### Windows: `better-sqlite3` build failed
-**Error:** `gyp ERR! find VS` or `Could not find any Visual Studio installation`
-
-**Solution:**
-1. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/) with "Desktop development with C++" workload
-2. Or use [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install) and run the project in Linux environment
-3. Alternative: Replace `better-sqlite3` with `sql.js` (pure JavaScript SQLite) in [backend/src/db/database.ts](backend/src/db/database.ts)
 
 #### Backend won't start
 - Check if port 3001 is already in use: `netstat -ano | findstr :3001` (Windows) or `lsof -i :3001` (Mac/Linux)

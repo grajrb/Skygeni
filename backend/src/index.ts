@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { initializeDatabase } from './db/database';
+import { getDb, initializeDatabase } from './db/database';
 import { seedDatabase } from './db/seed';
 import summaryRouter from './routes/summary';
 import driversRouter from './routes/drivers';
@@ -16,23 +16,26 @@ app.use(express.json());
 
 // Initialize database and seed data
 console.log('🚀 Initializing Revenue Intelligence Backend...');
-try {
-  initializeDatabase();
-  
-  // Check if database is empty and seed if needed
-  const db = require('./db/database').default;
-  const accountCount = db.prepare('SELECT COUNT(*) as count FROM accounts').get() as { count: number };
-  
-  if (accountCount.count === 0) {
-    console.log('📦 Database is empty, seeding data...');
-    seedDatabase();
-  } else {
-    console.log(`✅ Database already contains data (${accountCount.count} accounts)`);
+(async () => {
+  try {
+    await initializeDatabase();
+
+    const db = await getDb();
+    const stmt = db.prepare('SELECT COUNT(*) as count FROM accounts');
+    const accountCount = stmt.step() ? (stmt.getAsObject() as { count: number }) : { count: 0 };
+    stmt.free();
+
+    if (accountCount.count === 0) {
+      console.log('📦 Database is empty, seeding data...');
+      await seedDatabase();
+    } else {
+      console.log(`✅ Database already contains data (${accountCount.count} accounts)`);
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize database:', error);
+    process.exit(1);
   }
-} catch (error) {
-  console.error('❌ Failed to initialize database:', error);
-  process.exit(1);
-}
+})();
 
 // API Routes
 app.use('/api/summary', summaryRouter);

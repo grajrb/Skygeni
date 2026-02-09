@@ -3,9 +3,9 @@ import { generateRecommendations } from '../services/metrics';
 
 const router = Router();
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const recommendations = generateRecommendations();
+    const recommendations = await generateRecommendations();
 
     res.json({
       recommendations

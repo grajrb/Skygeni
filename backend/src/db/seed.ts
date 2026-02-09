@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { db, initializeDatabase } from './database';
+import { getDb, initializeDatabase, saveDbToFile } from './database';
 
 interface Account {
   account_id: string;
@@ -42,18 +42,20 @@ function loadJsonFile<T>(filename: string): T[] {
   return JSON.parse(fileContent);
 }
 
-function seedDatabase() {
+async function seedDatabase() {
   console.log('🌱 Starting database seed...');
 
   // Initialize schema
-  initializeDatabase();
+  await initializeDatabase();
+
+  const db = await getDb();
 
   // Clear existing data
-  db.exec('DELETE FROM activities');
-  db.exec('DELETE FROM deals');
-  db.exec('DELETE FROM targets');
-  db.exec('DELETE FROM reps');
-  db.exec('DELETE FROM accounts');
+  db.exec('DELETE FROM activities;');
+  db.exec('DELETE FROM deals;');
+  db.exec('DELETE FROM targets;');
+  db.exec('DELETE FROM reps;');
+  db.exec('DELETE FROM accounts;');
 
   // Load JSON files
   const accounts = loadJsonFile<Account>('accounts.json');
@@ -74,14 +76,16 @@ function seedDatabase() {
     'INSERT INTO accounts (account_id, name, industry, segment) VALUES (?, ?, ?, ?)'
   );
   for (const account of accounts) {
-    insertAccount.run(account.account_id, account.name, account.industry, account.segment);
+    insertAccount.run([account.account_id, account.name, account.industry, account.segment]);
   }
+  insertAccount.free();
 
   // Insert reps
   const insertRep = db.prepare('INSERT INTO reps (rep_id, name) VALUES (?, ?)');
   for (const rep of reps) {
-    insertRep.run(rep.rep_id, rep.name);
+    insertRep.run([rep.rep_id, rep.name]);
   }
+  insertRep.free();
 
   // Insert deals and track data quality issues
   const insertDeal = db.prepare(
@@ -92,7 +96,7 @@ function seedDatabase() {
   let inconsistentClosedAt = 0;
 
   for (const deal of deals) {
-    insertDeal.run(
+    insertDeal.run([
       deal.deal_id,
       deal.account_id,
       deal.rep_id,
@@ -100,7 +104,7 @@ function seedDatabase() {
       deal.amount,
       deal.created_at,
       deal.closed_at
-    );
+    ]);
 
     // Track data quality issues
     if (deal.amount === null) {
@@ -117,20 +121,23 @@ function seedDatabase() {
       inconsistentClosedAt++;
     }
   }
+  insertDeal.free();
 
   // Insert activities
   const insertActivity = db.prepare(
     'INSERT INTO activities (activity_id, deal_id, type, timestamp) VALUES (?, ?, ?, ?)'
   );
   for (const activity of activities) {
-    insertActivity.run(activity.activity_id, activity.deal_id, activity.type, activity.timestamp);
+    insertActivity.run([activity.activity_id, activity.deal_id, activity.type, activity.timestamp]);
   }
+  insertActivity.free();
 
   // Insert targets
   const insertTarget = db.prepare('INSERT INTO targets (month, target) VALUES (?, ?)');
   for (const target of targets) {
-    insertTarget.run(target.month, target.target);
+    insertTarget.run([target.month, target.target]);
   }
+  insertTarget.free();
 
   // Log data quality warnings
   console.log('\n⚠️  Data Quality Issues:');
@@ -140,17 +147,16 @@ function seedDatabase() {
   console.log(`   - Deals without activities: ${deals.length - new Set(activities.map(a => a.deal_id)).size}`);
 
   console.log('\n✅ Database seeded successfully!');
+
+  await saveDbToFile();
 }
 
 // Run seed if executed directly
 if (require.main === module) {
-  try {
-    seedDatabase();
-    db.close();
-  } catch (error) {
+  seedDatabase().catch((error) => {
     console.error('❌ Seed failed:', error);
     process.exit(1);
-  }
+  });
 }
 
 export { seedDatabase };

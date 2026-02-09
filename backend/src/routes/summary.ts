@@ -8,12 +8,12 @@ import {
 
 const router = Router();
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const currentQuarterRevenue = getCurrentQuarterRevenue();
-    const target = getQuarterlyTarget();
+    const currentQuarterRevenue = await getCurrentQuarterRevenue();
+    const target = await getQuarterlyTarget();
     const gapPercent = calculateGap(currentQuarterRevenue, target);
-    const yoyChange = getYoYChange();
+    const yoyChange = await getYoYChange();
 
     res.json({
       currentQuarterRevenue: Math.round(currentQuarterRevenue),

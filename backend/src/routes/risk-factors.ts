@@ -7,11 +7,11 @@ import {
 
 const router = Router();
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const staleDeals = getStaleDeals();
-    const underperformingReps = getUnderperformingReps();
-    const lowActivityAccounts = getLowActivityAccounts();
+    const staleDeals = await getStaleDeals();
+    const underperformingReps = await getUnderperformingReps();
+    const lowActivityAccounts = await getLowActivityAccounts();
 
     res.json({
       staleDeals: staleDeals.map((deal: any) => ({
