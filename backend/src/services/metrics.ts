@@ -27,6 +27,19 @@ export function getPreviousYearQuarter(): QuarterInfo {
   };
 }
 
+function getQuarterMonths(quarter: QuarterInfo): string[] {
+  const [yearText, monthText] = quarter.startDate.split('-');
+  const startYear = Number(yearText);
+  const startMonth = Number(monthText);
+
+  return [0, 1, 2].map((offset) => {
+    const totalMonths = startMonth - 1 + offset;
+    const year = startYear + Math.floor(totalMonths / 12);
+    const month = (totalMonths % 12) + 1;
+    return `${year}-${String(month).padStart(2, '0')}`;
+  });
+}
+
 /**
  * Get revenue for a specific date range
  * Uses closed_at for Closed Won deals, falls back to created_at if closed_at is null
@@ -63,11 +76,21 @@ export async function getQuarterlyTarget(): Promise<number> {
   const query = `
     SELECT COALESCE(SUM(target), 0) as total_target
     FROM targets
-    WHERE month IN ('2026-01', '2026-02', '2026-03')
+    WHERE month IN (?, ?, ?)
   `;
 
-  const result = await queryGet<{ total_target: number }>(query);
-  return result.total_target || 0;
+  const currentQuarter = getCurrentQuarter();
+  const currentMonths = getQuarterMonths(currentQuarter);
+  const currentResult = await queryGet<{ total_target: number }>(query, currentMonths);
+
+  if (currentResult.total_target) {
+    return currentResult.total_target;
+  }
+
+  const previousQuarter = getPreviousYearQuarter();
+  const previousMonths = getQuarterMonths(previousQuarter);
+  const previousResult = await queryGet<{ total_target: number }>(query, previousMonths);
+  return previousResult.total_target || 0;
 }
 
 /**
